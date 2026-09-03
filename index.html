@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Border & Roof Counter — GPS Field Tool</title>
+    <!-- All libraries are LOCAL (no internet CDN needed) for maximum reliability -->
+    <link rel="stylesheet" href="lib/leaflet.css" />
+    <link rel="stylesheet" href="lib/leaflet.draw.css" />
+    <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+    <div id="bootMsg" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#d93025;color:#fff;padding:12px 16px;font-family:sans-serif;font-size:14px;"></div>
+    <div id="app">
+        <!-- Sidebar -->
+        <aside id="sidebar">
+            <div class="sidebar-head">
+                <h1>Border &amp; Roof Counter</h1>
+                <p class="subtitle">GPS field tool for surveying borders and counting house units</p>
+            </div>
+
+            <!-- Step tracker -->
+            <div class="steps">
+                <div class="step active" id="stepBadge1"><span class="step-num">1</span> Track Route</div>
+                <div class="step" id="stepBadge2"><span class="step-num">2</span> Build Border</div>
+                <div class="step" id="stepBadge3"><span class="step-num">3</span> Count Roofs</div>
+            </div>
+
+            <!-- STEP 1 -->
+            <div class="step-panel" id="panel1">
+                <h2>Step 1 — Track the Border Route</h2>
+                <p class="hint">Press <strong>Start Track</strong> and physically travel along the border. Your GPS route is recorded automatically. Press <strong>Finish Track</strong> when you complete a full loop.</p>
+                <div class="track-status" id="trackStatus">Not tracking</div>
+                <div class="follow-row">
+                    <label class="switch">
+                        <input type="checkbox" id="followToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="follow-label">Auto-follow my GPS position</span>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat"><span class="stat-label">Points</span><span class="stat-value" id="statPoints">0</span></div>
+                    <div class="stat"><span class="stat-label">Distance</span><span class="stat-value" id="statDistance">0 m</span></div>
+                </div>
+                <div class="btn-row">
+                    <button id="btnStart" class="btn btn-primary">Start Track</button>
+                    <button id="btnFinish" class="btn btn-secondary" disabled>Finish Track</button>
+                </div>
+
+                <!-- Live status box: coordinates, GPS status, job status -->
+                <div class="status-box" id="statusBox">
+                    <div class="status-row">
+                        <span class="status-key">Job Status</span>
+                        <span class="status-val" id="jobStatus">Idle — press Start Track</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-key">GPS Status</span>
+                        <span class="status-val" id="gpsStatus">Not detected</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-key">Latitude</span>
+                        <span class="status-val mono" id="curLat">-</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-key">Longitude</span>
+                        <span class="status-val mono" id="curLng">-</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-key">Accuracy</span>
+                        <span class="status-val" id="curAcc">-</span>
+                    </div>
+                    <div class="status-row status-msg">
+                        <span class="status-key">Message</span>
+                        <span class="status-val" id="gpsError">Tap "Enable My Location" below</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 2 -->
+            <div class="step-panel hidden" id="panel2">
+                <h2>Step 2 — Build &amp; Adjust the Border</h2>
+                <p class="hint">A closed polygon from your route has been created. Drag the orange handles on the map to <strong>extend/adjust the border</strong>, then press <strong>Done</strong> to finalize.</p>
+                <div id="borderActions">
+                    <button id="btnDoneBorder" class="btn btn-primary">Done — Finalize Border</button>
+                    <button id="btnResetBorder" class="btn btn-secondary">Reset from Route</button>
+                </div>
+            </div>
+
+            <!-- Finalized border summary (aside) -->
+            <div id="borderInfo" class="border-info hidden">
+                <h2>Finalized Border</h2>
+                <div class="total-box">
+                    <span class="stat-label">Area</span>
+                    <span class="stat-value big" id="biArea">0 m²</span>
+                    <span class="stat-label">Perimeter</span>
+                    <span class="stat-value" id="biPerim">0</span>
+                    <span class="stat-label">Vertices</span>
+                    <span class="stat-value" id="biVerts">0</span>
+                </div>
+            </div>
+
+            <!-- STEP 3 -->
+            <div class="step-panel hidden" id="panel3">
+                <h2>Step 3 — Count House Roofs</h2>
+                <p class="hint">Use the rectangle tool (icon at top-left) to <strong>draw a rectangle over each roof</strong>. Each rectangle keeps its own count. Press <strong>Finalize Count</strong> to total everything.</p>
+                <button id="btnNewRect" class="btn btn-primary">Add Roof Rectangle</button>
+                <div id="rectList" class="rect-list"></div>
+                <div class="total-box">
+                    <span class="stat-label">Total Roof Count</span>
+                    <span class="stat-value big" id="totalRoofs">0</span>
+                    <span class="stat-label" id="totalRoofsLabel">houses counted</span>
+                </div>
+                <button id="btnFinalize" class="btn btn-primary">Finalize Count</button>
+            </div>
+
+            <!-- Export / result -->
+            <div id="resultPanel" class="hidden">
+                <hr>
+                <h2>Survey Result</h2>
+                <div id="summary"></div>
+                <div class="btn-row">
+                    <button id="btnExportJson" class="btn btn-secondary">Export JSON</button>
+                    <button id="btnExportCsv" class="btn btn-secondary">Export CSV</button>
+                    <button id="btnNewSurvey" class="btn btn-secondary">New Survey</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Map -->
+        <div id="map"></div>
+    </div>
+
+    <!-- GPS permission overlay: asks the user to tap (a real gesture) so the
+         browser reliably shows the location-permission popup on mobile. -->
+    <div id="gpsOverlay">
+        <div class="gps-overlay-card">
+            <div class="gps-overlay-icon">&#9673;</div>
+            <h2>Enable GPS Location</h2>
+            <p>Tap the button below so your browser asks for permission to use your location. This lets the app automatically find and track your position on the map.</p>
+            <button id="btnEnableGps" class="btn btn-primary">Enable My Location</button>
+            <div class="gps-overlay-hint" id="gpsOverlayHint"></div>
+        </div>
+    </div>
+
+    <!-- Local Leaflet libraries (no internet needed) -->
+    <script src="lib/leaflet.js"></script>
+    <script src="lib/leaflet.draw.js"></script>
+    <script src="js/app.js"></script>
+    <noscript>
+        <div style="padding:20px;font-family:sans-serif;">This tool needs JavaScript enabled to work.</div>
+    </noscript>
+</body>
+</html>
