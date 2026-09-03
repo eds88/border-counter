@@ -117,18 +117,28 @@
         }
         showGpsMsg('Waiting for GPS... If a permission popup appears, tap "Allow".', 'warn');
         setJobStatus('Looking for your location...', 'warn');
-        navigator.geolocation.getCurrentPosition(function (pos) { placeMarker(pos); }, function () {
-            /* one-shot may timeout; the watch below recovers */
-        }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
+
+        function gpsErrorMessage(err) {
+            let msg = 'Could not get location. ';
+            if (err.code === 1) { msg = 'Location permission DENIED. Allow location for this site in your browser settings, then tap "Enable My Location" again.'; showOverlay('Location permission was denied. Allow location for this site, then tap "Enable My Location".'); }
+            else if (err.code === 2) { msg = 'GPS unavailable. Move to an open area and try again.'; }
+            else if (err.code === 3) { msg = 'Location timed out (no satellite fix). Move outdoors with a clear sky and try again.'; }
+            else { msg = 'Could not get location: ' + (err.message || 'unknown error') + '. Ensure GPS + internet are on, open via https://.'; }
+            showGpsMsg(msg, 'err');
+            setJobStatus(msg, 'err');
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            function (pos) { placeMarker(pos); },
+            function (err) { gpsErrorMessage(err); }, // show one-shot errors instead of silent ignore
+            { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+        );
         if (state.watchId === null) {
-            state.watchId = navigator.geolocation.watchPosition(function (pos) { placeMarker(pos); }, function (err) {
-                let msg = 'Could not get location. ';
-                if (err.code === 1) { msg = 'Location permission DENIED. Allow location for this site in browser settings, then tap "Enable My Location" again.'; showOverlay('Location permission was denied. Allow location for this site, then tap "Enable My Location".'); }
-                else if (err.code === 2) { msg = 'GPS unavailable. Move to an open area and refresh.'; }
-                else if (err.code === 3) { msg = 'Location timed out. Move to an open area and try again.'; }
-                else { msg = 'Could not get location. Ensure GPS + internet are on, open via https://.'; }
-                showGpsMsg(msg, 'err');
-            }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 });
+            state.watchId = navigator.geolocation.watchPosition(
+                function (pos) { placeMarker(pos); },
+                function (err) { gpsErrorMessage(err); },
+                { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }
+            );
         }
     }
 
@@ -177,8 +187,7 @@
     }, null, { collapsed: true }).addTo(map);
 
     // locate control + follow-me toggle state
-    let followMe = true;
-    let userMarker = null;
+    followMe = true;
 
     L.control.locate = L.control.extend({
         onAdd: function () {

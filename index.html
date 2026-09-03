@@ -142,6 +142,17 @@
         </div>
     </div>
 
+    <!-- Global error capture: surfaces any JS error so it's easy to diagnose on device -->
+    <script>
+        window.addEventListener('error', function (e) {
+            var el = document.getElementById('bootMsg');
+            if (el) {
+                el.style.display = 'block';
+                el.textContent = 'JS error: ' + (e.message || 'unknown') + ' @ line ' + (e.lineno || '?');
+            }
+        });
+    </script>
+
     <!-- Local Leaflet libraries (no internet needed) -->
     <script src="lib/leaflet.js"></script>
     <script src="lib/leaflet.draw.js"></script>
