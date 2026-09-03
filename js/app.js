@@ -33,8 +33,26 @@
         rectCounter: 0,
         step: 1,
         editing: false,
-        finalizeDone: false
+        finalizeDone: false,
+        jobs: [],
+        savedJobLayer: null
     };
+
+    // ---- Persisted job registry (localStorage) ----
+    const STORAGE_KEY = 'borderJobs';
+    function loadJobs() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            state.jobs = raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            state.jobs = [];
+        }
+    }
+    function saveJobs() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.jobs));
+        } catch (e) { /* storage may be unavailable */ }
+    }
 
     // Element references (always safe; may be null if DOM changed)
     const btnStart = $('btnStart');
@@ -304,7 +322,7 @@
         state.tracking = true;
         trackStatus.textContent = 'Tracking your route... travel along the border.';
         trackStatus.classList.add('tracking');
-        setJobStatus('Tracking in progress...', 'ok');
+        setJobStatus('STARTED — tracking...', 'ok on');
         btnStart.disabled = true;
         btnFinish.disabled = false;
         updateStats();
@@ -364,7 +382,7 @@
         trackStatus.textContent = (state.routePoints.length > 0)
             ? 'Tracking finished. ' + state.routePoints.length + ' points recorded.'
             : 'No points recorded.';
-        setJobStatus((state.routePoints.length > 0) ? 'Border marked — ' + state.routePoints.length + ' points' : 'Finished with no points', (state.routePoints.length > 0) ? 'ok' : 'err');
+        setJobStatus((state.routePoints.length > 0) ? 'FINISHED — Border marked (' + state.routePoints.length + ' pts)' : 'Finished with no points', (state.routePoints.length > 0) ? 'ok on' : 'err');
         btnStart.disabled = false;
         btnFinish.disabled = true;
         updateStats();
@@ -558,6 +576,8 @@
         state.finalizeDone = true;
         showResult();
         goToStep(3);
+        saveCurrentJob();
+        setJobStatus('DONE — saved to My Jobs ✓', 'ok');
     }
 
     // ---------- Aside display / summary ----------
@@ -734,6 +754,128 @@
         goToStep(1);
     }
 
+    // ---------- Finished jobs ----------
+    function saveCurrentJob() {
+        if (!state.borderPoints || state.borderPoints.length < 3) return;
+        const job = {
+            id: Date.now(),
+            label: 'Job #' + (state.jobs.length + 1),
+            ts: Date.now(),
+            border: state.borderPoints.map(p => [p[0], p[1]]),
+            areaSqm: state.borderAreaSqm,
+            perimeterKm: state.borderKm,
+            roofCount: state.rectangles.reduce((s, r) => s + r.count, 0),
+            roofRects: state.rectangles.length
+        };
+        state.jobs.unshift(job);
+        saveJobs();
+        renderJobList();
+    }
+
+    function renderJobList() {
+        const list = $('jobsList');
+        if (!list) return;
+        list.innerHTML = '';
+        if (state.jobs.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'jobs-empty';
+            empty.textContent = 'No finished jobs yet.';
+            list.appendChild(empty);
+            return;
+        }
+        state.jobs.forEach(function (job, idx) {
+            const item = document.createElement('div');
+            item.className = 'job-item';
+
+            const top = document.createElement('div');
+            top.className = 'job-top';
+            const tleft = document.createElement('div');
+            const title = document.createElement('div');
+            title.className = 'job-title';
+            title.textContent = job.label;
+            const date = document.createElement('div');
+            date.className = 'job-date';
+            date.textContent = new Date(job.ts).toLocaleString();
+            tleft.appendChild(title);
+            tleft.appendChild(date);
+            const arrow = document.createElement('span');
+            arrow.className = 'job-arrow';
+            arrow.textContent = '▾';
+            top.appendChild(tleft);
+            top.appendChild(arrow);
+            item.appendChild(top);
+
+            const detail = document.createElement('div');
+            detail.className = 'job-detail';
+            detail.style.display = 'none';
+            detail.innerHTML =
+                '<div class="jrow"><span>Border Points</span><span>' + job.border.length + '</span></div>' +
+                '<div class="jrow"><span>Area</span><span>' + job.areaSqm.toFixed(1) + ' m² (' + (job.areaSqm / 10000).toFixed(3) + ' ha)</span></div>' +
+                '<div class="jrow"><span>Perimeter</span><span>' + job.perimeterKm.toFixed(2) + ' km</span></div>' +
+                '<div class="jrow"><span>Roof Rectangles</span><span>' + job.roofRects + '</span></div>' +
+                '<div class="jrow"><span>Total Count</span><span>' + job.roofCount + '</span></div>';
+            item.appendChild(detail);
+
+            // Toggle detail on click
+            top.addEventListener('click', function () {
+                const hidden = detail.style.display === 'none';
+                detail.style.display = hidden ? 'block' : 'none';
+                arrow.textContent = hidden ? '▴' : '▾';
+            });
+
+            // Actions: Show on map, Delete
+            const actions = document.createElement('div');
+            actions.className = 'job-actions';
+            const showBtn = document.createElement('button');
+            showBtn.className = 'btn btn-primary';
+            showBtn.textContent = 'Show Border';
+            showBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                showJobBorder(job);
+            });
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn btn-secondary';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                state.jobs.splice(idx, 1);
+                saveJobs();
+                renderJobList();
+            });
+            actions.appendChild(showBtn);
+            actions.appendChild(delBtn);
+            item.appendChild(actions);
+
+            list.appendChild(item);
+        });
+    }
+
+    // Redraw a saved job's border on the map
+    function showJobBorder(job) {
+        if (!map || !job.border || job.border.length < 3) return;
+        // Remove any existing saved-job border layer
+        if (state.savedJobLayer) { map.removeLayer(state.savedJobLayer); state.savedJobLayer = null; }
+        state.savedJobLayer = L.polygon(job.border, {
+            color: '#9334e6',
+            weight: 3,
+            fillColor: '#9334e6',
+            fillOpacity: 0.18
+        }).addTo(map);
+        map.fitBounds(state.savedJobLayer.getBounds());
+        // Reflect in the live job-status display
+        setJobStatus('Showing saved border: ' + job.label, 'ok');
+        goToStep(1);
+    }
+
+    function clearJobs() {
+        if (state.jobs.length === 0) return;
+        if (!confirm('Delete all saved jobs?')) return;
+        state.jobs = [];
+        saveJobs();
+        renderJobList();
+        if (state.savedJobLayer) { map.removeLayer(state.savedJobLayer); state.savedJobLayer = null; }
+    }
+
     // ---------- Event listeners ----------
     btnStart.addEventListener('click', startTracking);
     btnFinish.addEventListener('click', finishTracking);
@@ -755,6 +897,12 @@
     btnExportJson.addEventListener('click', exportJSON);
     btnExportCsv.addEventListener('click', exportCSV);
     btnNewSurvey.addEventListener('click', newSurvey);
+    const btnClearJobs = $('btnClearJobs');
+    if (btnClearJobs) btnClearJobs.addEventListener('click', clearJobs);
+
+    // Load persisted jobs and render the list
+    loadJobs();
+    renderJobList();
 
     // Initialize count display
     updateStats();
