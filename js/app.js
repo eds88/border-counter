@@ -35,7 +35,9 @@
         editing: false,
         finalizeDone: false,
         jobs: [],
-        savedJobLayer: null
+        savedJobLayer: null,
+        startMarker: null,
+        liveAreaPolygon: null
     };
 
     // ---- Persisted job registry (localStorage) ----
@@ -299,41 +301,60 @@
         }
         gpsError.textContent = '';
         state.routePoints = [];
+        state.tracking = true;
 
-        // Clear any watch started earlier by "Enable My Location" so only ONE
-        // geolocation watch (the tracking watch below) runs at a time.
+        // Clear any watch started by auto-locate so only the tracking watch runs.
         if (state.watchId !== null) {
             navigator.geolocation.clearWatch(state.watchId);
             state.watchId = null;
         }
 
-        // Move map to current position first
+        // Remove old route layers & markers for a clean start
+        if (state.routeLine) { map.removeLayer(state.routeLine); state.routeLine = null; }
+        if (state.routePolygon) { map.removeLayer(state.routePolygon); state.routePolygon = null; }
+        if (state.liveAreaPolygon) { map.removeLayer(state.liveAreaPolygon); state.liveAreaPolygon = null; }
+        if (state.startMarker) { map.removeLayer(state.startMarker); state.startMarker = null; }
+
+        // Prepare the route polyline
+        state.routeLine = L.polyline([], { color: '#f9ab00', weight: 4, opacity: 0.9 }).addTo(map);
+
+        // First, get the current position to tag it as the STARTING POINT.
         navigator.geolocation.getCurrentPosition(
             function (pos) {
-                map.setView([pos.coords.latitude, pos.coords.longitude], 18);
+                const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
+                recordRoutePoint(lat, lng, acc, true);
+                map.setView([lat, lng], 18);
+                tagStartPoint(lat, lng);
+                setJobStatus('STARTED — tracking...', 'ok on');
             },
-            function () { /* ignore initial error, watch will handle */ },
-            { enableHighAccuracy: true, timeout: 20000 }
+            function () { /* watch will pick up the fix */ },
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
         );
 
+        // Then start the continuous watch
         state.watchId = navigator.geolocation.watchPosition(
             onGPSFix,
             onGPSError,
             { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }
         );
 
-        if (state.routeLine) {
-            map.removeLayer(state.routeLine);
-            state.routeLine = null;
-        }
-        state.routeLine = L.polyline([], { color: '#f9ab00', weight: 4, opacity: 0.9 }).addTo(map);
-
-        state.tracking = true;
         trackStatus.textContent = 'Tracking your route... travel along the border.';
         trackStatus.classList.add('tracking');
-        setJobStatus('STARTED — tracking...', 'ok on');
+        setJobStatus('STARTED — locating start point...', 'ok on');
         btnStart.disabled = true;
         btnFinish.disabled = false;
+    }
+
+    // Tag the starting point with a distinct marker and its coordinate label
+    function tagStartPoint(lat, lng) {
+        if (!map) return;
+        if (state.startMarker) map.removeLayer(state.startMarker);
+        // Marker + a permanent label with the coordinates
+        state.startMarker = L.marker([lat, lng], {
+            icon: L.divIcon({ className: 'start-dot', iconSize: [16, 16], iconAnchor: [8, 8] })
+        }).addTo(map).bindTooltip('START\n' + lat.toFixed(6) + ', ' + lng.toFixed(6), {
+            permanent: true, direction: 'top', className: 'start-tooltip', offset: [0, -12]
+        });
     }
 
     function onGPSFix(pos) {
@@ -344,32 +365,55 @@
         // always update the live coordinates in the status box
         updateCoordDisplay(lat, lng, acc);
 
-        // only record a route point when accuracy is reasonable (< 60m) to avoid jumps
+        // Record the point (first fix also tags the start)
+        recordRoutePoint(lat, lng, acc, state.routePoints.length === 0);
+
+        // auto-follow the user while tracking (if toggled on)
+        if (followMe && state.tracking) {
+            map.setView([lat, lng]);
+        }
+    }
+
+    // Record a route point and update the live drawing (line + closing area)
+    function recordRoutePoint(lat, lng, acc, isFirst) {
         if (acc > 60) {
             setGpsStatus('Signal weak (±' + Math.round(acc) + 'm) — wait for better GPS', 'warn');
             return;
         }
+        if (!state.routeLine) return;
 
-        // Avoid duplicate points that are very close together
+        // Skip points that are very close together
         const last = state.routePoints[state.routePoints.length - 1];
         if (last) {
             const d = distMeters(last[0], last[1], lat, lng);
-            if (d < 2) return; // skip if <2m apart
+            if (d < 2) return;
         }
 
         state.routePoints.push([lat, lng]);
         state.routeLine.addLatLng([lat, lng]);
 
-        // update the GPS status to "tracking" if not already
-        setGpsStatus('Tracking ✓ (±' + Math.round(acc) + 'm)', 'ok');
+        // Tag the starting point once, with coordinates
+        if (isFirst && state.tracking) {
+            tagStartPoint(lat, lng);
+        }
 
-        // move the user marker with the GPS fix
+        // Move the live user marker
         if (userMarker) userMarker.setLatLng([lat, lng]);
         else userMarker = L.marker([lat, lng]).addTo(map);
 
-        // auto-follow the user while tracking (if toggled on)
-        if (followMe && state.tracking) {
-            map.setView([lat, lng]);
+        setGpsStatus('Tracking ✓ (±' + Math.round(acc) + 'm)', 'ok');
+
+        // Draw a live area that closes the route as it grows
+        if (state.tracking && state.routePoints.length >= 3) {
+            const closed = state.routePoints.slice();
+            closed.push([closed[0][0], closed[0][1]]);
+            if (state.liveAreaPolygon) {
+                state.liveAreaPolygon.setLatLngs(closed);
+            } else {
+                state.liveAreaPolygon = L.polygon(closed, {
+                    color: '#1a73e8', weight: 3, fillColor: '#1a73e8', fillOpacity: 0.15
+                }).addTo(map);
+            }
         }
     }
 
@@ -385,6 +429,8 @@
             state.watchId = null;
         }
         state.tracking = false;
+        // Remove the live-trace area polygon (the final border replaces it)
+        if (state.liveAreaPolygon) { map.removeLayer(state.liveAreaPolygon); state.liveAreaPolygon = null; }
         trackStatus.classList.remove('tracking');
         trackStatus.textContent = (state.routePoints.length > 0)
             ? 'Tracking finished. ' + state.routePoints.length + ' points recorded.'
@@ -843,6 +889,8 @@
         if (state.watchId !== null) navigator.geolocation.clearWatch(state.watchId);
         if (state.routeLine) map.removeLayer(state.routeLine);
         if (state.routePolygon) map.removeLayer(state.routePolygon);
+        if (state.liveAreaPolygon) map.removeLayer(state.liveAreaPolygon);
+        if (state.startMarker) map.removeLayer(state.startMarker);
         state.rectangles.forEach(r => {
             map.removeLayer(r.layer);
             if (r.tip) map.removeLayer(r.tip);
@@ -852,6 +900,8 @@
         state.rectCounter = 0;
         state.routeLine = null;
         state.routePolygon = null;
+        state.liveAreaPolygon = null;
+        state.startMarker = null;
         state.borderPoints = [];
         state.borderAreaSqm = 0;
         state.borderKm = 0;

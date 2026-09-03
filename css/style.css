@@ -247,6 +247,29 @@ body {
 .border-info { padding: 16px 20px; border-top: 1px solid var(--border); }
 .border-info h2 { font-size: 15px; margin-bottom: 10px; }
 
+/* Start point marker + coordinate tag */
+.start-dot {
+    background: #188038;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px #188038;
+}
+.start-tooltip {
+    background: #188038;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: pre-line;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.start-tooltip::before {
+    border-top-color: #188038;
+}
+
 /* Map + below-map route panel */
 #mapWrap {
     flex: 1;
