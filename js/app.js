@@ -119,6 +119,20 @@
     function placeMarker(pos) {
         const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
         updateCoordDisplay(lat, lng, acc);
+
+        // Only show the current-location marker when GPS accuracy is good,
+        // otherwise keep the previous (more accurate) position.
+        const ACCEPT_ACCURACY = 30; // metres
+        if (acc > ACCEPT_ACCURACY) {
+            if (state.tracking) {
+                setJobStatus('STARTED — tracking...', 'ok on');
+            } else {
+                showGpsMsg('Location found (approx ±' + Math.round(acc) + 'm) — moving for better fix', 'warn');
+                setJobStatus('Press Start Track', 'ok on');
+            }
+            return; // don't move the marker to an inaccurate fix
+        }
+
         // If we are recording, keep the "tracking" status; otherwise prompt to start.
         if (state.tracking) {
             setJobStatus('STARTED — tracking...', 'ok on');
@@ -380,7 +394,7 @@
 
     // Record a route point and update the live drawing (line + closing area)
     function recordRoutePoint(lat, lng, acc, isFirst) {
-        if (acc > 60) {
+        if (acc > 25) {
             setGpsStatus('Signal weak (±' + Math.round(acc) + 'm) — wait for better GPS', 'warn');
             return;
         }
