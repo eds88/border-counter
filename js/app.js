@@ -66,6 +66,9 @@
     const btnNewSurvey = $('btnNewSurvey');
     const trackStatus = $('trackStatus');
     const gpsError = $('gpsError');
+    const routeBottom = $('routeBottom');
+    const routeImg = $('routeImg');
+    const btnDownloadPng = $('btnDownloadPng');
 
     // ---- GPS status/message helpers (no map dependency) ----
     function showGpsMsg(msg, cls) {
@@ -111,8 +114,13 @@
     function placeMarker(pos) {
         const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
         updateCoordDisplay(lat, lng, acc);
-        showGpsMsg('Location found ✓ Accuracy ±' + Math.round(acc) + 'm', 'ok');
-        setJobStatus('Location on — you can Start Track', 'ok');
+        // If we are recording, keep the "tracking" status; otherwise prompt to start.
+        if (state.tracking) {
+            setJobStatus('STARTED — tracking...', 'ok on');
+        } else {
+            showGpsMsg('Location found ✓ Accuracy ±' + Math.round(acc) + 'm', 'ok');
+            setJobStatus('Press Start Track', 'ok on');
+        }
         if (!map) return; // map not ready; still recorded coords
         const ll = [lat, lng];
         map.setView(ll, 18);
@@ -138,12 +146,12 @@
 
         function gpsErrorMessage(err) {
             let msg = 'Could not get location. ';
-            if (err.code === 1) { msg = 'Location permission DENIED. Allow location for this site in your browser settings, then tap "Enable My Location" again.'; showOverlay('Location permission was denied. Allow location for this site, then tap "Enable My Location".'); }
-            else if (err.code === 2) { msg = 'GPS unavailable. Move to an open area and try again.'; }
-            else if (err.code === 3) { msg = 'Location timed out (no satellite fix). Move outdoors with a clear sky and try again.'; }
-            else { msg = 'Could not get location: ' + (err.message || 'unknown error') + '. Ensure GPS + internet are on, open via https://.'; }
+            if (err.code === 1) { msg = 'Location permission DENIED. Allow location for this site, then refresh.'; showOverlay('Location permission was denied. Allow location for this site, then refresh the page.'); }
+            else if (err.code === 2) { msg = 'GPS unavailable. Turn on GPS and move to an open area.'; }
+            else if (err.code === 3) { msg = 'Location timed out (no satellite fix). Move outdoors with a clear sky.'; }
+            else { msg = 'Could not get location: ' + (err.message || 'unknown error') + '. Ensure GPS + internet are on.'; }
             showGpsMsg(msg, 'err');
-            setJobStatus(msg, 'err');
+            setJobStatus('Please Enable GPS', 'err');
         }
 
         navigator.geolocation.getCurrentPosition(
@@ -223,12 +231,13 @@
     });
     new L.control.locate({ position: 'topleft' }).addTo(map);
 
-    // On load, show the "Enable GPS" overlay so the user taps to allow location
-    // (a real gesture — mobile browsers often block GPS without a tap).
+    // Auto-trace the user's location on page load (no tap required).
+    // A small delay lets the map finish initializing first.
     setTimeout(function () {
-        showGpsMsg('Tap "Enable My Location" to find your position', 'warn');
-        showOverlay();
-    }, 400);
+        showGpsMsg('Tracing your location automatically...', 'warn');
+        setJobStatus('Please Enable GPS', 'warn');
+        findMe();
+    }, 600);
 
     // ---------- Draw control (rectangle creation) ----------
     // Warn if the draw library failed to load (common cause of the app not starting)
@@ -325,7 +334,6 @@
         setJobStatus('STARTED — tracking...', 'ok on');
         btnStart.disabled = true;
         btnFinish.disabled = false;
-        updateStats();
     }
 
     function onGPSFix(pos) {
@@ -363,7 +371,6 @@
         if (followMe && state.tracking) {
             map.setView([lat, lng]);
         }
-        updateStats();
     }
 
     function onGPSError(err) {
@@ -385,14 +392,132 @@
         setJobStatus((state.routePoints.length > 0) ? 'FINISHED — Border marked (' + state.routePoints.length + ' pts)' : 'Finished with no points', (state.routePoints.length > 0) ? 'ok on' : 'err');
         btnStart.disabled = false;
         btnFinish.disabled = true;
-        updateStats();
         if (state.routePoints.length >= 3) {
             goToStep(2);
             buildBorderFromRoute();
+            showAndDownloadRoutePNG();
         } else {
             gpsError.textContent = 'Need at least 3 points. Please re-track.';
             setJobStatus('Not enough points (need 3+)', 'err');
         }
+    }
+
+    // ---------- Marked route PNG export ----------
+    // Renders the recorded route (and closed border) onto a canvas and
+    // both displays it "below the map" and auto-downloads it as a PNG.
+    function showAndDownloadRoutePNG() {
+        const points = state.routePoints;
+        if (points.length < 2) return;
+
+        const el = $('routeBottom');
+        const img = $('routeImg');
+        const W = 1200, H = 900, pad = 60;
+
+        // Planar (equirectangular) projection is accurate enough for local areas.
+        let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+        points.forEach(function (p) {
+            if (p[0] < minLat) minLat = p[0];
+            if (p[0] > maxLat) maxLat = p[0];
+            if (p[1] < minLng) minLng = p[1];
+            if (p[1] > maxLng) maxLng = p[1];
+        });
+        const spanLat = (maxLat - minLat) || 0.0001;
+        const spanLng = (maxLng - minLng) || 0.0001;
+        const pxPerLat = (H - 2 * pad) / spanLat;
+        const pxPerLng = (W - 2 * pad) / spanLng;
+        function X(lng) { return pad + (lng - minLng) * pxPerLng; }
+        function Y(lat) { return H - pad - (lat - minLat) * pxPerLat; }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+
+        // Background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+
+        // Grid
+        ctx.strokeStyle = '#e8eaed';
+        ctx.lineWidth = 1;
+        const gridN = 8;
+        for (let i = 0; i <= gridN; i++) {
+            const gx = pad + (W - 2 * pad) * i / gridN;
+            const gy = pad + (H - 2 * pad) * i / gridN;
+            ctx.beginPath(); ctx.moveTo(gx, pad); ctx.lineTo(gx, H - pad); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(W - pad, gy); ctx.stroke();
+        }
+
+        // Closed border polygon (if we have a closed border)
+        const borderPts = state.routePolygon ? coordsOfPolygon(state.routePolygon) : null;
+
+        // Fill polygon
+        if (borderPts && borderPts.length >= 3) {
+            ctx.fillStyle = 'rgba(154, 52, 230, 0.12)';
+            ctx.beginPath();
+            ctx.moveTo(X(borderPts[0][1]), Y(borderPts[0][0]));
+            for (let i = 1; i < borderPts.length; i++) ctx.lineTo(X(borderPts[i][1]), Y(borderPts[i][0]));
+            ctx.closePath(); ctx.fill();
+        }
+
+        // Route polyline
+        ctx.beginPath();
+        ctx.moveTo(X(points[0][1]), Y(points[0][0]));
+        for (let i = 1; i < points.length; i++) ctx.lineTo(X(points[i][1]), Y(points[i][0]));
+        ctx.strokeStyle = '#1a73e8';
+        ctx.lineWidth = 6;
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Start marker
+        ctx.fillStyle = '#188038';
+        ctx.beginPath();
+        ctx.arc(X(points[0][1]), Y(points[0][0]), 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        // End marker
+        if (points.length > 1) {
+            const last = points[points.length - 1];
+            ctx.fillStyle = '#d93025';
+            ctx.beginPath();
+            ctx.arc(X(last[1]), Y(last[0]), 12, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Title + legend
+        ctx.fillStyle = '#202124';
+        ctx.font = 'bold 34px Arial';
+        ctx.fillText('Marked Travel Route', pad, 40);
+        ctx.font = '22px Arial';
+        ctx.fillStyle = '#5f6368';
+        ctx.fillText('Green = Start    Red = End', pad, H - 18);
+
+        const dataURL = canvas.toDataURL('image/png');
+        if (img) img.src = dataURL;
+        if (el) el.classList.remove('hidden');
+
+        // Auto-download
+        downloadPNG(dataURL);
+    }
+
+    // Extract [lat,lng] pairs from a Leaflet polygon layer
+    function coordsOfPolygon(polygon) {
+        const ll = polygon.getLatLngs();
+        const arr = Array.isArray(ll) ? ll[0] : ll;
+        const out = [];
+        (function rec(a) {
+            if (a.length && Array.isArray(a[0])) a.forEach(rec);
+            else out.push([a[0], a[1]]);
+        })(arr);
+        return out;
+    }
+
+    function downloadPNG(dataURL) {
+        const a = document.createElement('a');
+        a.href = dataURL;
+        a.download = 'marked-route-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     // ---------- Step 2: Build border polygon ----------
@@ -615,12 +740,6 @@
         }
     }
 
-    // ---------- Stats ----------
-    function updateStats() {
-        $('statPoints').textContent = state.routePoints.length;
-        $('statDistance').textContent = formatDistance(routeLengthMeters(state.routePoints));
-    }
-
     // ---------- Geo math helpers ----------
     function distMeters(lat1, lng1, lat2, lng2) {
         const R = 6371000;
@@ -748,10 +867,11 @@
         btnStart.disabled = false;
         btnFinish.disabled = true;
         updateCoordDisplay(null, null, null);
-        setJobStatus('Idle — press Start Track');
+        setJobStatus('Please Enable GPS', 'warn');
         setGpsStatus('Not detected');
-        updateStats();
+        if (routeBottom) routeBottom.classList.add('hidden');
         goToStep(1);
+        setTimeout(function () { findMe(); }, 300);
     }
 
     // ---------- Finished jobs ----------
@@ -899,13 +1019,13 @@
     btnNewSurvey.addEventListener('click', newSurvey);
     const btnClearJobs = $('btnClearJobs');
     if (btnClearJobs) btnClearJobs.addEventListener('click', clearJobs);
+    if (btnDownloadPng) btnDownloadPng.addEventListener('click', function () { showAndDownloadRoutePNG(); });
 
     // Load persisted jobs and render the list
     loadJobs();
     renderJobList();
 
     // Initialize count display
-    updateStats();
     updateTotalRoofs();
 
 })();

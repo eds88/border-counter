@@ -38,10 +38,6 @@
                     </label>
                     <span class="follow-label">Auto-follow my GPS position</span>
                 </div>
-                <div class="stat-grid">
-                    <div class="stat"><span class="stat-label">Points</span><span class="stat-value" id="statPoints">0</span></div>
-                    <div class="stat"><span class="stat-label">Distance</span><span class="stat-value" id="statDistance">0 m</span></div>
-                </div>
                 <div class="btn-row">
                     <button id="btnStart" class="btn btn-primary">Start Track</button>
                     <button id="btnFinish" class="btn btn-secondary" disabled>Finish Track</button>
@@ -51,7 +47,7 @@
                 <div class="status-box" id="statusBox">
                     <div class="status-row">
                         <span class="status-key">Job Status</span>
-                        <span class="status-val" id="jobStatus">Idle — press Start Track</span>
+                        <span class="status-val" id="jobStatus">Please Enable GPS</span>
                     </div>
                     <div class="status-row">
                         <span class="status-key">GPS Status</span>
@@ -71,7 +67,7 @@
                     </div>
                     <div class="status-row status-msg">
                         <span class="status-key">Message</span>
-                        <span class="status-val" id="gpsError">Tap "Enable My Location" below</span>
+                        <span class="status-val" id="gpsError">Waiting to trace your location...</span>
                     </div>
                 </div>
             </div>
@@ -140,7 +136,19 @@
         </aside>
 
         <!-- Map -->
-        <div id="map"></div>
+        <div id="mapWrap">
+            <div id="map"></div>
+            <!-- Marked route shown below the map after Finish Track -->
+            <div id="routeBottom" class="hidden">
+                <div class="route-bottom-head">Marked Travel Route</div>
+                <div class="route-img-wrap">
+                    <img id="routeImg" alt="Marked travel route" />
+                </div>
+                <div class="route-bottom-actions">
+                    <button id="btnDownloadPng" class="btn btn-primary">Download Route PNG</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- GPS permission overlay: asks the user to tap (a real gesture) so the
