@@ -72,6 +72,8 @@
     const routeImg = $('routeImg');
     const btnDownloadPng = $('btnDownloadPng');
     const btnCloseRoute = $('btnCloseRoute');
+    const coordsList = $('coordsList');
+    const coordsCount = $('coordsCount');
 
     // ---- GPS status/message helpers (no map dependency) ----
     function showGpsMsg(msg, cls) {
@@ -303,6 +305,7 @@
         gpsError.textContent = '';
         state.routePoints = [];
         state.tracking = true;
+        renderCoordList();
 
         // Clear any watch started by auto-locate so only the tracking watch runs.
         if (state.watchId !== null) {
@@ -392,6 +395,7 @@
 
         state.routePoints.push([lat, lng]);
         state.routeLine.addLatLng([lat, lng]);
+        renderCoordList();
 
         // Tag the starting point once, with coordinates
         if (isFirst && state.tracking) {
@@ -422,6 +426,50 @@
         let msg = 'GPS error (code ' + err.code + '): ' + err.message;
         setGpsStatus(msg, 'err');
         if (gpsError) gpsError.textContent = msg;
+    }
+
+    // Render the recorded coordinates list (below the finished jobs panel)
+    function renderCoordList() {
+        if (!coordsList) return;
+        coordsList.innerHTML = '';
+        if (coordsCount) coordsCount.textContent = state.routePoints.length + ' points';
+
+        if (state.routePoints.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'coords-empty';
+            empty.textContent = 'Coordinates recorded during tracking will appear here.';
+            coordsList.appendChild(empty);
+            return;
+        }
+
+        state.routePoints.forEach(function (p, i) {
+            const row = document.createElement('div');
+            row.className = 'coord-row';
+
+            const num = document.createElement('span');
+            num.className = 'coord-num';
+            num.textContent = '#' + (i + 1);
+
+            const latlng = document.createElement('span');
+            latlng.className = 'coord-pts';
+            latlng.textContent = p[0].toFixed(6) + ', ' + p[1].toFixed(6);
+
+            const live = document.createElement('span');
+            live.className = 'coord-live';
+            if (i === 0) {
+                live.innerHTML = '<span class="coord-idx">START</span>';
+            } else if (i === state.routePoints.length - 1) {
+                live.innerHTML = '<span class="live-dot"></span><span class="coord-idx">LIVE</span>';
+            }
+
+            row.appendChild(num);
+            row.appendChild(latlng);
+            row.appendChild(live);
+            coordsList.appendChild(row);
+        });
+
+        // Auto-scroll to the newest point
+        coordsList.scrollTop = coordsList.scrollHeight;
     }
 
     function finishTracking() {
@@ -897,6 +945,7 @@
             if (r.tip) map.removeLayer(r.tip);
         });
         state.routePoints = [];
+        renderCoordList();
         state.rectangles = [];
         state.rectCounter = 0;
         state.routeLine = null;

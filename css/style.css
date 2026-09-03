@@ -408,6 +408,48 @@ body {
 .job-item .job-actions { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border); }
 .job-item .job-actions .btn { flex: 1; padding: 6px 8px; font-size: 12px; }
 
+/* Live tracked coordinates panel */
+#coordsPanel { padding: 16px 20px; }
+#coordsPanel hr { border: none; border-top: 1px solid var(--border); margin-bottom: 14px; }
+#coordsPanel h2 { font-size: 15px; }
+.coords-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.coords-count {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary);
+    background: #eef4ff;
+    padding: 3px 10px;
+    border-radius: 12px;
+}
+.coords-list { margin-top: 4px; max-height: 260px; overflow-y: auto; }
+.coords-empty { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
+.coord-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 5px;
+    background: var(--surface);
+    font-size: 12px;
+}
+.coord-num {
+    font-weight: 700;
+    color: var(--primary);
+    min-width: 26px;
+}
+.coord-idx { color: var(--text-muted); }
+.coord-pts { font-family: monospace; font-weight: 600; }
+.coord-live { display: flex; align-items: center; gap: 6px; }
+.live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: pulse 1.2s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.3; } }
+
 /* Highlight current live job status */
 .status-val.on { color: var(--success); font-weight: 700; }
 .status-val.on::before { content: '● '; }
