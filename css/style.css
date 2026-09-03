@@ -280,6 +280,7 @@ body {
 }
 #map {
     flex: 1;
+    height: 50vh;
 }
 
 /* Marked route modal (shown on Finish Track) */
@@ -464,8 +465,8 @@ body {
         border-right: none;
         border-bottom: 1px solid var(--border);
     }
-    #mapWrap { height: 55vh; }
-    #map { flex: 1; }
+    #mapWrap { height: 50vh; }
+    #map { height: 50vh; }
 }
 
 /* GPS permission overlay */
