@@ -138,15 +138,22 @@
         <!-- Map -->
         <div id="mapWrap">
             <div id="map"></div>
-            <!-- Marked route shown below the map after Finish Track -->
-            <div id="routeBottom" class="hidden">
-                <div class="route-bottom-head">Marked Travel Route</div>
-                <div class="route-img-wrap">
-                    <img id="routeImg" alt="Marked travel route" />
-                </div>
-                <div class="route-bottom-actions">
-                    <button id="btnDownloadPng" class="btn btn-primary">Download Route PNG</button>
-                </div>
+        </div>
+    </div>
+
+    <!-- Marked route modal (shown on Finish Track) -->
+    <div id="routeModal" class="hidden">
+        <div class="route-modal-card">
+            <div class="route-modal-head">
+                <span class="route-bottom-head">Marked Travel Route</span>
+                <button id="btnCloseRoute" class="route-close" title="Close">✕</button>
+            </div>
+            <div class="route-field">Your marked route has been saved. Download the PNG below.</div>
+            <div class="route-img-wrap">
+                <img id="routeImg" alt="Marked travel route" />
+            </div>
+            <div class="route-bottom-actions">
+                <button id="btnDownloadPng" class="btn btn-primary">Download Route PNG</button>
             </div>
         </div>
     </div>

@@ -68,9 +68,10 @@
     const btnNewSurvey = $('btnNewSurvey');
     const trackStatus = $('trackStatus');
     const gpsError = $('gpsError');
-    const routeBottom = $('routeBottom');
+    const routeModal = $('routeModal');
     const routeImg = $('routeImg');
     const btnDownloadPng = $('btnDownloadPng');
+    const btnCloseRoute = $('btnCloseRoute');
 
     // ---- GPS status/message helpers (no map dependency) ----
     function showGpsMsg(msg, cls) {
@@ -455,7 +456,7 @@
         const points = state.routePoints;
         if (points.length < 2) return;
 
-        const el = $('routeBottom');
+        const el = $('routeModal');
         const img = $('routeImg');
         const W = 1200, H = 900, pad = 60;
 
@@ -919,7 +920,7 @@
         updateCoordDisplay(null, null, null);
         setJobStatus('Please Enable GPS', 'warn');
         setGpsStatus('Not detected');
-        if (routeBottom) routeBottom.classList.add('hidden');
+        if (routeModal) routeModal.classList.add('hidden');
         goToStep(1);
         setTimeout(function () { findMe(); }, 300);
     }
@@ -1070,6 +1071,7 @@
     const btnClearJobs = $('btnClearJobs');
     if (btnClearJobs) btnClearJobs.addEventListener('click', clearJobs);
     if (btnDownloadPng) btnDownloadPng.addEventListener('click', function () { showAndDownloadRoutePNG(); });
+    if (btnCloseRoute) btnCloseRoute.addEventListener('click', function () { if (routeModal) routeModal.classList.add('hidden'); });
 
     // Load persisted jobs and render the list
     loadJobs();
